@@ -105,6 +105,7 @@ export default function LiveMap({
   const geopoliticalGroupRef = useRef<L.LayerGroup | null>(null);
   const riskHeatmapGroupRef = useRef<L.LayerGroup | null>(null);
   const supplyChainGroupRef = useRef<L.LayerGroup | null>(null);
+  const chokepointsGroupRef = useRef<L.LayerGroup | null>(null);
 
   // Playback timer
   useEffect(() => {
@@ -126,7 +127,8 @@ export default function LiveMap({
       minZoom: 2,
       maxZoom: 12,
       zoomControl: false,
-      attributionControl: false
+      attributionControl: false,
+      worldCopyJump: true
     });
 
     mapRef.current = map;
@@ -139,6 +141,7 @@ export default function LiveMap({
     geopoliticalGroupRef.current = L.layerGroup().addTo(map);
     riskHeatmapGroupRef.current = L.layerGroup().addTo(map);
     supplyChainGroupRef.current = L.layerGroup().addTo(map);
+    chokepointsGroupRef.current = L.layerGroup().addTo(map);
 
     // Clean up on unmount
     return () => {
@@ -181,6 +184,9 @@ export default function LiveMap({
     ).length;
   };
 
+  // World copy offsets to ensure features remain rendered when panning / rotating 360 degrees horizontally
+  const WORLD_OFFSETS = [-360, 0, 360];
+
   // Re-build Map Layers dynamically on timeline, layers or crisis changes
   useEffect(() => {
     if (!mapRef.current) return;
@@ -193,6 +199,7 @@ export default function LiveMap({
     if (geopoliticalGroupRef.current) geopoliticalGroupRef.current.clearLayers();
     if (riskHeatmapGroupRef.current) riskHeatmapGroupRef.current.clearLayers();
     if (supplyChainGroupRef.current) supplyChainGroupRef.current.clearLayers();
+    if (chokepointsGroupRef.current) chokepointsGroupRef.current.clearLayers();
 
     // 1. PIPELINE LAYER
     if (showPipelines && pipelinesGroupRef.current) {
@@ -201,31 +208,35 @@ export default function LiveMap({
         const color = isOperational ? '#00D9FF' : (pipe.status === 'reduced' ? '#FFD700' : '#DC143C');
         const dashClass = isOperational ? 'pulsing-pipeline-active' : 'pulsing-pipeline-reduced';
 
-        const polyline = L.polyline(pipe.latlngs, {
-          color,
-          weight: pipe.status === 'disrupted' ? 1.5 : 3.5,
-          opacity: 0.8,
-          className: dashClass
-        }).addTo(pipelinesGroupRef.current!);
+        WORLD_OFFSETS.forEach(offset => {
+          const offsetLatlngs: [number, number][] = pipe.latlngs.map(([lat, lng]) => [lat, lng + offset]);
 
-        polyline.bindTooltip(`
-          <div class="font-mono text-[10px] space-y-0.5">
-            <div class="font-bold text-brand-accent">${pipe.name}</div>
-            <div>Source: ${pipe.source}</div>
-            <div>Destination: ${pipe.destination}</div>
-            <div>Flow Capacity: ${pipe.flowVolume}</div>
-            <div>Status: <span class="uppercase font-bold" style="color:${color}">${pipe.status}</span></div>
-          </div>
-        `, { className: 'custom-map-tooltip', direction: 'top' });
+          const polyline = L.polyline(offsetLatlngs, {
+            color,
+            weight: pipe.status === 'disrupted' ? 1.5 : 3.5,
+            opacity: 0.8,
+            className: dashClass
+          }).addTo(pipelinesGroupRef.current!);
 
-        polyline.on('click', (e) => {
-          L.DomEvent.stopPropagation(e);
-          setSelectedPipeline(pipe);
-          setSelectedVessel(null);
-          setSelectedChoke(null);
-          setSelectedPort(null);
-          setSelectedCountry(null);
-          onSelectNode(`${pipe.name} (Pipeline)`);
+          polyline.bindTooltip(`
+            <div class="font-mono text-[10px] space-y-0.5">
+              <div class="font-bold text-brand-accent">${pipe.name}</div>
+              <div>Source: ${pipe.source}</div>
+              <div>Destination: ${pipe.destination}</div>
+              <div>Flow Capacity: ${pipe.flowVolume}</div>
+              <div>Status: <span class="uppercase font-bold" style="color:${color}">${pipe.status}</span></div>
+            </div>
+          `, { className: 'custom-map-tooltip', direction: 'top' });
+
+          polyline.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            setSelectedPipeline(pipe);
+            setSelectedVessel(null);
+            setSelectedChoke(null);
+            setSelectedPort(null);
+            setSelectedCountry(null);
+            onSelectNode(`${pipe.name} (Pipeline)`);
+          });
         });
       });
     }
@@ -242,20 +253,24 @@ export default function LiveMap({
           const successRate = tanker.vulnerabilityIndex < 40 ? 'reliable' : 'risky';
           const color = successRate === 'reliable' ? '#00FF00' : '#DC143C';
 
-          const trail = L.polyline(tanker.routePoints, {
-            color,
-            weight: 1.5,
-            opacity: 0.22,
-            className: 'supply-trail-pulse'
-          }).addTo(supplyChainGroupRef.current!);
+          WORLD_OFFSETS.forEach(offset => {
+            const offsetRoute: [number, number][] = tanker.routePoints.map(([lat, lng]) => [lat, lng + offset]);
 
-          trail.bindTooltip(`
-            <div class="font-mono text-[10px] space-y-0.5">
-              <div class="font-bold text-white uppercase">${tanker.source} ➔ ${tanker.destination}</div>
-              <div>Estimated Daily Flow: ${(tanker.capacity * 1.5 / 1000000).toFixed(1)}M bbls/day equivalent</div>
-              <div>Risk Profile: <span class="${successRate === 'reliable' ? 'text-brand-success' : 'text-brand-danger'} font-bold">${successRate.toUpperCase()}</span></div>
-            </div>
-          `, { className: 'custom-map-tooltip', direction: 'top' });
+            const trail = L.polyline(offsetRoute, {
+              color,
+              weight: 1.5,
+              opacity: 0.22,
+              className: 'supply-trail-pulse'
+            }).addTo(supplyChainGroupRef.current!);
+
+            trail.bindTooltip(`
+              <div class="font-mono text-[10px] space-y-0.5">
+                <div class="font-bold text-white uppercase">${tanker.source} ➔ ${tanker.destination}</div>
+                <div>Estimated Daily Flow: ${(tanker.capacity * 1.5 / 1000000).toFixed(1)}M bbls/day equivalent</div>
+                <div>Risk Profile: <span class="${successRate === 'reliable' ? 'text-brand-success' : 'text-brand-danger'} font-bold">${successRate.toUpperCase()}</span></div>
+              </div>
+            `, { className: 'custom-map-tooltip', direction: 'top' });
+          });
         }
       });
     }
@@ -273,13 +288,15 @@ export default function LiveMap({
         let intensity = spot.maxRisk;
         if (crisisMode === 'normal') intensity = Math.max(15, spot.maxRisk - 40);
 
-        L.circle(spot.coords, {
-          radius: spot.radius,
-          color: '#DC143C',
-          weight: 0,
-          fillColor: '#DC143C',
-          fillOpacity: (intensity / 100) * 0.14
-        }).addTo(riskHeatmapGroupRef.current!);
+        WORLD_OFFSETS.forEach(offset => {
+          L.circle([spot.coords[0], spot.coords[1] + offset], {
+            radius: spot.radius,
+            color: '#DC143C',
+            weight: 0,
+            fillColor: '#DC143C',
+            fillOpacity: (intensity / 100) * 0.14
+          }).addTo(riskHeatmapGroupRef.current!);
+        });
       });
     }
 
@@ -293,32 +310,34 @@ export default function LiveMap({
       ];
 
       regions.forEach(region => {
-        const circle = L.circle(region.coords, {
-          radius: 350000,
-          color: region.color,
-          fillColor: region.color,
-          fillOpacity: 0.05,
-          weight: 1.5,
-          dashArray: '3 3'
-        }).addTo(geopoliticalGroupRef.current!);
+        WORLD_OFFSETS.forEach(offset => {
+          const circle = L.circle([region.coords[0], region.coords[1] + offset], {
+            radius: 350000,
+            color: region.color,
+            fillColor: region.color,
+            fillOpacity: 0.05,
+            weight: 1.5,
+            dashArray: '3 3'
+          }).addTo(geopoliticalGroupRef.current!);
 
-        circle.bindTooltip(`
-          <div class="font-mono text-[10px] space-y-1">
-            <div class="font-bold border-b border-brand-border pb-1 mb-1" style="color: ${region.color}">${region.name}</div>
-            <div>Security Level: <span class="font-bold" style="color: ${region.color}">${region.risk.toUpperCase()}</span></div>
-            <div class="text-[#B0BEC5] leading-tight font-sans text-[9.5px]">${region.desc}</div>
-            <div class="border-t border-brand-border/40 pt-1 mt-1 font-sans text-brand-accent">Strategic Impact: ${region.impact}</div>
-          </div>
-        `, { className: 'custom-map-tooltip', direction: 'top' });
+          circle.bindTooltip(`
+            <div class="font-mono text-[10px] space-y-1">
+              <div class="font-bold border-b border-brand-border pb-1 mb-1" style="color: ${region.color}">${region.name}</div>
+              <div>Security Level: <span class="font-bold" style="color: ${region.color}">${region.risk.toUpperCase()}</span></div>
+              <div class="text-[#B0BEC5] leading-tight font-sans text-[9.5px]">${region.desc}</div>
+              <div class="border-t border-brand-border/40 pt-1 mt-1 font-sans text-brand-accent">Strategic Impact: ${region.impact}</div>
+            </div>
+          `, { className: 'custom-map-tooltip', direction: 'top' });
 
-        circle.on('click', (e) => {
-          L.DomEvent.stopPropagation(e);
-          setSelectedCountry(region.name);
-          setSelectedVessel(null);
-          setSelectedChoke(null);
-          setSelectedPort(null);
-          setSelectedPipeline(null);
-          onSelectNode(region.name);
+          circle.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            setSelectedCountry(region.name);
+            setSelectedVessel(null);
+            setSelectedChoke(null);
+            setSelectedPort(null);
+            setSelectedPipeline(null);
+            onSelectNode(region.name);
+          });
         });
       });
     }
@@ -358,23 +377,6 @@ export default function LiveMap({
           [storm.startLat, storm.startLng]
         ] as [number, number][];
 
-        L.polygon(coneCoords, {
-          color: '#d97706',
-          weight: 1,
-          fillColor: '#d97706',
-          fillOpacity: 0.05,
-          dashArray: '3 3'
-        }).addTo(weatherGroupRef.current!);
-
-        // Predicted track
-        L.polyline([[storm.startLat, storm.startLng], [storm.endLat, storm.endLng]], {
-          color: '#d97706',
-          weight: 1.2,
-          dashArray: '5 5',
-          opacity: 0.45
-        }).addTo(weatherGroupRef.current!);
-
-        // Cyclone Marker (spinning vortex SVG)
         const stormIcon = L.divIcon({
           html: `
             <div class="relative flex items-center justify-center">
@@ -393,21 +395,41 @@ export default function LiveMap({
           iconAnchor: [20, 20]
         });
 
-        const stormMarker = L.marker([lat, lng], { icon: stormIcon }).addTo(weatherGroupRef.current!);
+        WORLD_OFFSETS.forEach(offset => {
+          const offsetCone = coneCoords.map(([cLat, cLng]) => [cLat, cLng + offset] as [number, number]);
 
-        stormMarker.bindTooltip(`
-          <div class="font-mono text-[10px] space-y-1">
-            <div class="font-bold text-brand-alert border-b border-brand-border pb-1 mb-1">${storm.name}</div>
-            <div>Max Wind: <span class="text-white font-bold">${storm.windSpeed}</span></div>
-            <div>Barometric: <span class="text-white">${storm.pressure}</span></div>
-            <div>Eye Coordinates: [${lat.toFixed(2)}°, ${lng.toFixed(2)}°]</div>
-            <div>Trajectory: NW Vector</div>
-          </div>
-        `, { className: 'custom-map-tooltip', direction: 'top' });
+          L.polygon(offsetCone, {
+            color: '#d97706',
+            weight: 1,
+            fillColor: '#d97706',
+            fillOpacity: 0.05,
+            dashArray: '3 3'
+          }).addTo(weatherGroupRef.current!);
 
-        stormMarker.on('click', (e) => {
-          L.DomEvent.stopPropagation(e);
-          onSelectNode(`${storm.name} (Cyclone System)`);
+          // Predicted track
+          L.polyline([[storm.startLat, storm.startLng + offset], [storm.endLat, storm.endLng + offset]], {
+            color: '#d97706',
+            weight: 1.2,
+            dashArray: '5 5',
+            opacity: 0.45
+          }).addTo(weatherGroupRef.current!);
+
+          const stormMarker = L.marker([lat, lng + offset], { icon: stormIcon }).addTo(weatherGroupRef.current!);
+
+          stormMarker.bindTooltip(`
+            <div class="font-mono text-[10px] space-y-1">
+              <div class="font-bold text-brand-alert border-b border-brand-border pb-1 mb-1">${storm.name}</div>
+              <div>Max Wind: <span class="text-white font-bold">${storm.windSpeed}</span></div>
+              <div>Barometric: <span class="text-white">${storm.pressure}</span></div>
+              <div>Eye Coordinates: [${lat.toFixed(2)}°, ${lng.toFixed(2)}°]</div>
+              <div>Trajectory: NW Vector</div>
+            </div>
+          `, { className: 'custom-map-tooltip', direction: 'top' });
+
+          stormMarker.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            onSelectNode(`${storm.name} (Cyclone System)`);
+          });
         });
       });
     }
@@ -416,9 +438,6 @@ export default function LiveMap({
     if (showPorts && portsGroupRef.current) {
       ports.forEach(port => {
         const shipsWaiting = getShipsWaitingForPort(port.id);
-        const congestionColorClass = port.congestionScore > 25 
-          ? 'border-brand-danger bg-brand-danger/10 text-brand-danger' 
-          : (port.congestionScore > 15 ? 'border-brand-alert bg-brand-alert/10 text-brand-alert' : 'border-brand-success bg-brand-success/10 text-brand-success');
         
         const portIcon = L.divIcon({
           html: `
@@ -448,69 +467,75 @@ export default function LiveMap({
           iconAnchor: [15, 15]
         });
 
-        const marker = L.marker([port.lat, port.lng], { icon: portIcon }).addTo(portsGroupRef.current!);
+        WORLD_OFFSETS.forEach(offset => {
+          const marker = L.marker([port.lat, port.lng + offset], { icon: portIcon }).addTo(portsGroupRef.current!);
 
-        marker.bindTooltip(`
-          <div class="font-mono text-[10px] space-y-1">
-            <div class="font-bold text-brand-success text-xs border-b border-brand-border pb-1 mb-1">${port.name} (${port.country})</div>
-            <div>Throughput: <span class="text-white">${port.capacity}</span></div>
-            <div>Queue Length: <span class="text-brand-accent font-bold">${shipsWaiting} VLCCs waiting</span></div>
-            <div>Congestion: <span class="font-bold" style="color:${port.congestionScore > 25 ? '#DC143C' : '#00FF00'}">${port.congestionScore}%</span></div>
-            <div>Status: <span class="uppercase font-bold">${port.status}</span></div>
-          </div>
-        `, { className: 'custom-map-tooltip', direction: 'top' });
+          marker.bindTooltip(`
+            <div class="font-mono text-[10px] space-y-1">
+              <div class="font-bold text-brand-success text-xs border-b border-brand-border pb-1 mb-1">${port.name} (${port.country})</div>
+              <div>Throughput: <span class="text-white">${port.capacity}</span></div>
+              <div>Queue Length: <span class="text-brand-accent font-bold">${shipsWaiting} VLCCs waiting</span></div>
+              <div>Congestion: <span class="font-bold" style="color:${port.congestionScore > 25 ? '#DC143C' : '#00FF00'}">${port.congestionScore}%</span></div>
+              <div>Status: <span class="uppercase font-bold">${port.status}</span></div>
+            </div>
+          `, { className: 'custom-map-tooltip', direction: 'top' });
 
-        marker.on('click', (e) => {
-          L.DomEvent.stopPropagation(e);
-          setSelectedPort(port);
-          setSelectedVessel(null);
-          setSelectedChoke(null);
-          setSelectedPipeline(null);
-          setSelectedCountry(null);
-          onSelectNode(port.name);
+          marker.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            setSelectedPort(port);
+            setSelectedVessel(null);
+            setSelectedChoke(null);
+            setSelectedPipeline(null);
+            setSelectedCountry(null);
+            onSelectNode(port.name);
+          });
         });
       });
     }
 
     // 7. STRATEGIC CHOKEPOINTS
-    chokepoints.forEach(choke => {
-      const isCritical = choke.currentRisk > 12 || crisisMode === choke.id;
-      const color = isCritical ? '#ef4444' : (choke.currentRisk > 10 ? '#d97706' : '#10b981');
+    if (chokepointsGroupRef.current) {
+      chokepoints.forEach(choke => {
+        const isCritical = choke.currentRisk > 12 || crisisMode === choke.id;
+        const color = isCritical ? '#ef4444' : (choke.currentRisk > 10 ? '#d97706' : '#10b981');
 
-      const chokeIcon = L.divIcon({
-        html: `
-          <div class="relative flex items-center justify-center">
-            ${isCritical ? `<div class="absolute w-8 h-8 rounded-full border border-brand-danger pulsing-halo"></div>` : ''}
-            <div class="w-4.5 h-4.5 rotate-45 border-2 flex items-center justify-center relative z-10 shadow-2xl" style="background-color: ${color}; border-color: #090d16;">
+        const chokeIcon = L.divIcon({
+          html: `
+            <div class="relative flex items-center justify-center">
+              ${isCritical ? `<div class="absolute w-8 h-8 rounded-full border border-brand-danger pulsing-halo"></div>` : ''}
+              <div class="w-4.5 h-4.5 rotate-45 border-2 flex items-center justify-center relative z-10 shadow-2xl" style="background-color: ${color}; border-color: #090d16;">
+              </div>
             </div>
-          </div>
-        `,
-        className: '',
-        iconSize: [22, 22],
-        iconAnchor: [11, 11]
+          `,
+          className: '',
+          iconSize: [22, 22],
+          iconAnchor: [11, 11]
+        });
+
+        WORLD_OFFSETS.forEach(offset => {
+          const marker = L.marker([choke.lat, choke.lng + offset], { icon: chokeIcon }).addTo(chokepointsGroupRef.current!);
+
+          marker.bindTooltip(`
+            <div class="font-mono text-[10px] space-y-1">
+              <div class="font-bold text-xs border-b border-brand-border pb-1 mb-1" style="color: ${color}">${choke.name}</div>
+              <div>Normal Throughput: <span class="text-white">${choke.normalFlow}</span></div>
+              <div>Strategic Risk Index: <span class="font-bold" style="color:${color}">${choke.currentRisk}%</span></div>
+              <div>Postures: <span class="uppercase font-bold" style="color:${color}">${choke.status}</span></div>
+            </div>
+          `, { className: 'custom-map-tooltip', direction: 'top' });
+
+          marker.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            setSelectedChoke(choke);
+            setSelectedVessel(null);
+            setSelectedPort(null);
+            setSelectedPipeline(null);
+            setSelectedCountry(null);
+            onSelectNode(choke.name);
+          });
+        });
       });
-
-      const marker = L.marker([choke.lat, choke.lng], { icon: chokeIcon }).addTo(mapRef.current!);
-
-      marker.bindTooltip(`
-        <div class="font-mono text-[10px] space-y-1">
-          <div class="font-bold text-xs border-b border-brand-border pb-1 mb-1" style="color: ${color}">${choke.name}</div>
-          <div>Normal Throughput: <span class="text-white">${choke.normalFlow}</span></div>
-          <div>Strategic Risk Index: <span class="font-bold" style="color:${color}">${choke.currentRisk}%</span></div>
-          <div>Postures: <span class="uppercase font-bold" style="color:${color}">${choke.status}</span></div>
-        </div>
-      `, { className: 'custom-map-tooltip', direction: 'top' });
-
-      marker.on('click', (e) => {
-        L.DomEvent.stopPropagation(e);
-        setSelectedChoke(choke);
-        setSelectedVessel(null);
-        setSelectedPort(null);
-        setSelectedPipeline(null);
-        setSelectedCountry(null);
-        onSelectNode(choke.name);
-      });
-    });
+    }
 
     // 8. TANKER VESSEL SHIPPING LANE PLOTS
     if (showShips && shipsGroupRef.current) {
@@ -568,8 +593,6 @@ export default function LiveMap({
           iconAnchor: [12, 12]
         });
 
-        const marker = L.marker([lat, lng], { icon: shipIcon }).addTo(shipsGroupRef.current!);
-
         const tooltipContent = `
           <div class="font-mono text-[10px] space-y-1">
             <div class="font-bold text-brand-accent text-xs border-b border-brand-border pb-1 mb-1">${tanker.name}</div>
@@ -583,16 +606,20 @@ export default function LiveMap({
           </div>
         `;
 
-        marker.bindTooltip(tooltipContent, { className: 'custom-map-tooltip', direction: 'top' });
+        WORLD_OFFSETS.forEach(offset => {
+          const marker = L.marker([lat, lng + offset], { icon: shipIcon }).addTo(shipsGroupRef.current!);
 
-        marker.on('click', (e) => {
-          L.DomEvent.stopPropagation(e);
-          setSelectedVessel(tanker);
-          setSelectedChoke(null);
-          setSelectedPort(null);
-          setSelectedPipeline(null);
-          setSelectedCountry(null);
-          onSelectNode(`${tanker.name} (${tanker.cargo})`);
+          marker.bindTooltip(tooltipContent, { className: 'custom-map-tooltip', direction: 'top' });
+
+          marker.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            setSelectedVessel(tanker);
+            setSelectedChoke(null);
+            setSelectedPort(null);
+            setSelectedPipeline(null);
+            setSelectedCountry(null);
+            onSelectNode(`${tanker.name} (${tanker.cargo})`);
+          });
         });
       });
     }
