@@ -727,7 +727,7 @@ export default function LiveMap({
           <div className="space-y-1.5 text-[10.5px] font-mono">
             {/* Toggles */}
             <label className="flex items-center justify-between cursor-pointer hover:text-slate-200 text-slate-300">
-              <span>🛳️ Vessels Fleet</span>
+              <span>Vessels Fleet</span>
               <input 
                 type="checkbox" 
                 checked={showShips} 
@@ -737,7 +737,7 @@ export default function LiveMap({
             </label>
 
             <label className="flex items-center justify-between cursor-pointer hover:text-slate-200 text-slate-300">
-              <span>🛢️ Pipeline Grid</span>
+              <span>Pipeline Grid</span>
               <input 
                 type="checkbox" 
                 checked={showPipelines} 
@@ -747,7 +747,7 @@ export default function LiveMap({
             </label>
 
             <label className="flex items-center justify-between cursor-pointer hover:text-slate-200 text-slate-300">
-              <span>⚓ Terminals</span>
+              <span>Terminals</span>
               <input 
                 type="checkbox" 
                 checked={showPorts} 
@@ -757,7 +757,7 @@ export default function LiveMap({
             </label>
 
             <label className="flex items-center justify-between cursor-pointer hover:text-slate-200 text-slate-300">
-              <span>🌪️ Weather Storms</span>
+              <span>Weather Storms</span>
               <input 
                 type="checkbox" 
                 checked={showWeather} 
@@ -767,7 +767,7 @@ export default function LiveMap({
             </label>
 
             <label className="flex items-center justify-between cursor-pointer hover:text-slate-200 text-slate-300">
-              <span>🛡️ Naval Corridors</span>
+              <span>Naval Corridors</span>
               <input 
                 type="checkbox" 
                 checked={showGeopolitical} 
@@ -777,7 +777,7 @@ export default function LiveMap({
             </label>
 
             <label className="flex items-center justify-between cursor-pointer hover:text-slate-200 text-slate-300">
-              <span>🟢 Logistical Trails</span>
+              <span>Logistical Trails</span>
               <input 
                 type="checkbox" 
                 checked={showSupplyChains} 
@@ -787,7 +787,7 @@ export default function LiveMap({
             </label>
 
             <label className="flex items-center justify-between cursor-pointer hover:text-slate-200 text-slate-300">
-              <span>🔴 Risk Heatmap</span>
+              <span>Risk Heatmap</span>
               <input 
                 type="checkbox" 
                 checked={showRiskHeatmap} 

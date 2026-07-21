@@ -319,7 +319,7 @@ export default function App() {
                 : 'text-brand-muted hover:text-slate-200 border border-transparent'
             }`}
           >
-            <Terminal className="w-3.5 h-3.5" /> 📡 Command Center
+            <Terminal className="w-3.5 h-3.5" /> Command Center
           </button>
           
           <button
@@ -330,7 +330,7 @@ export default function App() {
                 : 'text-brand-muted hover:text-slate-200 border border-transparent'
             }`}
           >
-            <Briefcase className="w-3.5 h-3.5" /> 💼 Executive View
+            <Briefcase className="w-3.5 h-3.5" /> Executive View
           </button>
 
           <button
@@ -341,7 +341,7 @@ export default function App() {
                 : 'text-brand-muted hover:text-slate-200 border border-transparent'
             }`}
           >
-            <Flame className="w-3.5 h-3.5" /> 🧪 Crisis Lab
+            <Flame className="w-3.5 h-3.5" /> Crisis Lab
           </button>
 
           <button
@@ -352,7 +352,7 @@ export default function App() {
                 : 'text-brand-muted hover:text-slate-200 border border-transparent'
             }`}
           >
-            <Network className="w-3.5 h-3.5" /> ♊ Digital Twin
+            <Network className="w-3.5 h-3.5" /> Digital Twin
           </button>
 
           <button
@@ -363,7 +363,7 @@ export default function App() {
                 : 'text-brand-muted hover:text-slate-200 border border-transparent'
             }`}
           >
-            <FileText className="w-3.5 h-3.5" /> 📝 Briefing Center
+            <FileText className="w-3.5 h-3.5" /> Briefing Center
           </button>
         </div>
 
